@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+import cors from "cors";
 const pdfParse = require("pdf-parse");
 const fs = require("fs");
 const { GoogleGenAI } = require('@google/genai');
@@ -15,6 +16,13 @@ const port = process.env.PORT || 3000;
 
 const upload = multer({ dest: "uploads/" });
 
+app.use(
+  cors({
+    origin: "https://pdf-rag-backend-740v.onrender.com/",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 const ai = new GoogleGenAI({
    apiKey: process.env.GEMINI_API_KEY
 });
