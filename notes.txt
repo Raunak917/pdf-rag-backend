@@ -1,0 +1,169 @@
+simple code for server initialization
+        ---->>>uploaded file to text readable
+            ----->>>Chunkingsssss(simple, then paragrapgh wise chunking)
+
+
+
+
+
+
+            now manual semantic check--> cosineSimilarity se bachne ke liye ---> vectorDB ka use kar rhe hai!-->Qdrant use here
+
+
+
+            complete tutorial code-->const express = require("express");
+const multer = require("multer");
+const pdfParse = require("pdf-parse");
+const fs = require("fs");
+const { GoogleGenAI } = require('@google/genai');
+const { QdrantClient } = require('@qdrant/js-client-rest');
+require('dotenv').config();
+console.log("API key exists:", !!process.env.GEMINI_API_KEY);
+
+
+const app = express();
+const port = 3000;
+
+const upload = multer({ dest: "uploads/" });
+
+const ai = new GoogleGenAI({
+   apiKey: process.env.GEMINI_API_KEY
+});
+
+async function createEmbedding(text){
+  const response = await ai.models.embedContent({
+    model: 'gemini-embedding-2',
+    contents: text,
+  });
+  return response.embeddings[0].values;
+};
+
+const qdrant = new QdrantClient({
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API,
+});
+
+
+function cosineSimilarity(vecA, vecB){
+  let dotProd = 0;
+  for(let i=0; i< vecA.length; i++){
+    dotProd += vecA[i] * vecB[i];
+  }
+  return dotProd;
+}
+
+app.get("/", (req, res) => {
+  res.send("you are in Root directory");
+});
+
+app.get("/create-collection", async (req,res)=>{
+  try{
+    await qdrant.createCollection('pdf-docs',{
+      vectors: {
+        size: 3072,
+        distance: "Cosine",
+      }
+    })
+    res.send(`collection is created`);
+  }catch(e){
+
+  }
+})
+
+app.post("/upload", upload.single("pdf"), async (req, res) => {
+  console.log(req.file);
+  try{
+    const dataBuffer = fs.readFileSync(req.file.path);
+    const pdfData = await pdfParse(dataBuffer);
+    const text = pdfData.text;
+    const chunks = text.split("\n\n").filter((chunk)=> chunk.trim() != '');
+
+    // const embedding = await createEmbedding(chunks[0]);
+    // console.log(embedding);
+    //now creating embedding array--->
+    const chunkEmbedding = [];
+    for(const chunk of chunks){
+      const embedding = await createEmbedding(chunk);
+
+      chunkEmbedding.push({
+        text: chunk,
+        embedding
+      });
+    }
+
+    //vectorDB store points--->
+    const points = chunkEmbedding.map((item, index)=>({
+      id: index+1,
+      vector: item.embedding,
+      payload: {
+        text: item.text
+      },
+
+    }));
+
+    await qdrant.upsert("pdf-docs", {
+      points,
+    });
+
+    //hard-coded question---
+    // const question = "What is NovaTech ?";
+    //from user
+    const question = req.body.question;
+    const quetsionEmbedding = await createEmbedding(question);
+
+    // const matchedChunk = chunks.find((chunk)=> chunk.toLowerCase().includes('novatech'));
+    // let bestChunk = 'Hu';  //null
+    // let bestScore = -Infinity;
+
+    const searchResult = await qdrant.searchMatrixOffsets('pdf-docs', {
+      vector: quetsionEmbedding,
+      limit: 1,
+    });
+
+    const bestChunk = searchResult[0].payload.text;
+    // console.log(searchResult);
+
+    // for(const items of chunkEmbedding){
+    //   const score = cosineSimilarity(quetsionEmbedding, items.embedding);
+    //   if(score > bestScore){
+    //     bestChunk = items.text;
+    //     bestScore = score;
+    //   }
+    // }
+    // console.log(bestChunk);
+
+  
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash-lite",
+      // contents: `Explain this pdf in single text ${chunks[0]}`
+      contents: `Answer the question using the context: ${bestChunk} ans Question is: ${question}`
+    })
+    res.send(response.text);
+
+  }catch(err){
+   console.log(err);
+   res.status(500).send(err);
+  }
+ 
+
+//   ***metghod-1 chunking***
+//   const chunks = [];
+//   for(let i=0; i<text.length; i+=500){
+//       chunks.push(text.slice(i, i+500));
+//   }
+
+// **method-2**
+// const chunks = text.split("\n");  //\n\n bhi hai
+//   res.json({
+//    totalChunks: chunks.length,
+//    chunks
+//   })
+
+
+ 
+});
+
+app.listen(port, () => {
+  console.log(`app is listening on port: ${port}`);
+});
