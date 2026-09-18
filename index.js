@@ -46,9 +46,10 @@ app.get("/create-collection", async (req,res)=>{
     })
     res.send(`collection is created`);
   }catch(e){
-
+    console.error(e);
+    res.status(500).send("Failed to create collection");
   }
-})
+});
 
 app.post("/upload", upload.single("pdf"), async (req, res) => {
   console.log(req.file);
@@ -88,12 +89,14 @@ app.post("/upload", upload.single("pdf"), async (req, res) => {
     const quetsionEmbedding = await createEmbedding(question);
 
 
-    const searchResult = await qdrant.searchMatrixOffsets('pdf-docs', {
+    const searchResult = await qdrant.query('pdf-docs', {
       vector: quetsionEmbedding,
       limit: 1,
+      with_payload: true,
     });
 
-    const bestChunk = searchResult[0].payload.text;
+
+    const bestChunk = searchResult.points[0].payload.text;
  
     
     const response = await ai.models.generateContent({
