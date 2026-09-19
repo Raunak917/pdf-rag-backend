@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-import cors from "cors";
+const cors = require("cors");
 const pdfParse = require("pdf-parse");
 const fs = require("fs");
 const { GoogleGenAI } = require('@google/genai');
