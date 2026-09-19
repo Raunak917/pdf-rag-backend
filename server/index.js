@@ -18,7 +18,7 @@ const upload = multer({ dest: "uploads/" });
 
 app.use(
   cors({
-    origin: "https://pdf-rag-backend-740v.onrender.com/",
+    origin: "https://pdf-rag-backend-740v.onrender.com",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
